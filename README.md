@@ -1,32 +1,18 @@
-# Anthropic Academy — Hook Challenge
-
-![repo-cover](repo-cover.png)
-
-A challenge project exploring **Claude Code Hooks** — deterministic wrappers that run before or after Claude uses a tool, letting you enforce behavior that can't be lost to prompt drift.
-
----
-
-## What Are Hooks?
+# Claude Code Hooks
 
 Hooks can be used before or after claude code does something, or to block an action.
 This can be used to determinately drive behavior instead of relying on steering it to do so with instructions that could be lost.
-
-Could be used to:
-- Run tests automaticallu after a file is changed
-- Block depreacated fucntion useage
-- Check for TODO comments in code tthat claude writes and and add them to a log file
+Could be used to run tests automaticallu after a file is changed, block depreacated fucntion useage, check for TODO comments in code tthat claude writes and and add them to a log file, etc.
 
 Hooks are defined in `settings.local.json` in `/.claude`.
 Hooks happen at the wrapper end just before it uses a tool or after.
+Hooks that run before a tool are called **PreToolUse** hooks and after are called **PostToolUse**.
+To use hooks we add add config to the claude settings file.
 Hooks can be written by hand or by using `/hooks` command in claude code.
 
 ---
 
-## Hook Types
-
-### PreToolUse
-
-Runs just before Claude uses a tool. Can **block** the tool call and send an error message back to Claude.
+## PreToolUse
 
 ```json
 "PreToolUse": [
@@ -42,9 +28,13 @@ Runs just before Claude uses a tool. Can **block** the tool call and send an err
 ]
 ```
 
-### PostToolUse
+- The `"matcher":` string is used to find cases of the tool used
+- The `"command":` is the command to run
+- PreToolUse can block the tool call sending an error message back to Claude
 
-Runs after Claude uses a tool. Can provide **additional feedback** to Claude after the tool was ran.
+---
+
+## PostToolUse
 
 ```json
 "PostToolUse": [
@@ -60,15 +50,14 @@ Runs after Claude uses a tool. Can provide **additional feedback** to Claude aft
 ]
 ```
 
-- The `"matcher":` string is used to find cases of the tool used
-- The `"command":` is the command to run
+- PostToolUse can provide additional feedback to claude after the tool was ran
 - Tools are seperated witht he pipe symble `|`
 
 ---
 
-## How It Works
+## Tool Call Data
 
-Claude feeds in tool call data as JSON to the hook command via stdin:
+Claude feeds in tool call data as json to the wrapper:
 
 ```json
 {
@@ -82,31 +71,28 @@ Claude feeds in tool call data as JSON to the hook command via stdin:
 }
 ```
 
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0` | All is well |
-| `2` | Tool blocked (PreToolUse only) — stderr is sent back to Claude as feedback |
-
 ---
 
 ## Building a Hook
 
 In buildiing a hook you need to:
 
-1. Decide on a PreToolUse or PostToolUse hook
-2. Dertermine which type of toll calls you want to watcjh for
-3. Wriate a command tha twi;;; recive the too; ca;;
-4. If needed cammand shou;d frovide feedback to claude via stderr and the appropriate exit code
+- Decide on a PreToolUse or PostToolUse hook
+- Dertermine which type of toll calls you want to watcjh for
+- Wriate a command tha twi;;; recive the too; ca;;
+- If needed cammand shou;d frovide feedback to claude
+  - Exit code `0` means all is well
+  - Exit code `2` tool blocked (PretoolUse only) any standard tool sterr logs sent back to claude as feedback
 
 ---
 
 ## Challenge: Block `.env` from Being Read
 
-The challenge is to write a hook that prevents Claude from reading `.env` files.
+[GitHub - KemonoNeco/Anthropic-Academy-Hook-Challenge](https://github.com/KemonoNeco/Anthropic-Academy-Hook-Challenge)
 
-### Settings Config
+![GitHub - KemonoNeco/Anthropic-Academy-Hook-Challenge](github-repo-cover.png)
+
+So in the challenge to write a hook to prevent `.env` being read from claude code:
 
 ```json
 {
@@ -117,7 +103,7 @@ The challenge is to write a hook that prevents Claude from reading `.env` files.
         "hooks": [
           {
             "type": "command",
-            "command": "node ./hooks/read_hooks.js"
+            "command": "true"
           }
         ]
       }
@@ -126,9 +112,10 @@ The challenge is to write a hook that prevents Claude from reading `.env` files.
 }
 ```
 
-We define a `PreToolUse` with `"matcher": "Read|Grep"` to catch all read and grep commands. We would than define a command with `"type": "command"` followed with `"command": "{actual code to run}"` — we would need to make our own script to actually have determanistic behavior of checking if the file is `.env`.
+We would define a `PreToolUse` with `"matcher": "Read|Grep"` to catch all read and grep commands.
+We would than define a command with `"type": "command"` followed with `"command": "{actual code to run}"` we would need to make our own script to actually have determanistic behavior of checking if the file is `.env`.
 
-### Hook Script
+In the challenge, this is already written as `node ./hooks/read_hooks.js"`:
 
 ```js
 async function main() {
@@ -142,32 +129,24 @@ async function main() {
   const readPath =
     toolArgs.tool_input?.file_path || toolArgs.tool_input?.path || "";
 
-  // Ensure Claude isn't trying to read the .env file
-  if (readPath.includes(".env")) {
-    console.error(
-      ".env contains sensitive information, you cannot access or read it.",
-    );
-    process.exit(2);
-  }
+  // TODO: ensure Claude isn't trying to read the .env file
 }
 
 main();
 ```
 
-### Result
+We still need to add actual logic for checking if its attempting to read the `.env` file specifically and give it context and a proper exit code:
 
-After renaming the example settings file and relaunching claude it can no longer read this file:
-
-![hook-demo](hook-demo.png)
-
----
-
-## File Structure
-
+```js
+// Ensure Claude isn't trying to read the .env file
+if (readPath.includes(".env")) {
+    console.error(
+        ".env contains sensitive information, you cannot access or read it.",
+    );
+    process.exit(2);
+}
 ```
-.
-├── hooks/
-│   └── read_hooks.js       # Hook script to block .env access
-└── .claude/
-    └── settings.local.json # Hook configuration
-```
+
+After renaming the example settings file and relaunching claude it can no longer read this file.
+
+![Claude Code blocking .env access](hook-block-screenshot.png)
